@@ -113,9 +113,10 @@ The radial chart summarizes the average risk profile, clearly showing that defau
 
 ## 🏁 Conclusion
 
-This project demonstrates how **data-driven credit risk analytics** can support better lending decisions.  <br>
-Financial stability indicators, particularly **debt-to-income ratio** and **employment duration** were identified as the strongest predictors of default. <br>
-Among all models tested, **Random Forest** delivered the **best overall performance** based on test-set AUC and was selected as the final predictive model. <br>
+* This project demonstrates how **data-driven credit risk analytics** can support better lending decisions.  <br>
+* Financial stability indicators, particularly **debt-to-income ratio** and **employment duration** were identified as the strongest predictors of default. <br>
+* Among all models tested, **Random Forest** delivered the **best overall performance** based on test-set AUC and was selected as the final predictive model. <br>
+* In addition, **sentiment analysis on customer feedback** showed that most responses were positive, while negative sentiment consistently highlighted **slow processing** and **lack of proactive support**, clear operational areas to improve the customer experience.
 
 ---
 
