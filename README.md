@@ -83,6 +83,12 @@ The radial chart summarizes the average risk profile, clearly showing that defau
 
 ---
 
+## 🌍 Live Report (GitHub Pages)
+
+➡️ View the full HTML report here: **(paste your GitHub Pages link here)**
+
+---
+
 ## 🛠️ Tech Stack
 
 - **Language:** R  
