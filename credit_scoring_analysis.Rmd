@@ -1,5 +1,5 @@
 ---
-title: "<span style='font-size:38px;color:maroon;'>Capstone Project_Credit Scoring</span><br><span style='font-size:18px;'>R. Gowri Lakshani</span>"
+title: "<span style='font-size:38px;color:maroon;'>Credit Scoring</span><br><span style='font-size:18px;'>Gowri Abinesh</span>"
 output: 
   html_document:
     df_print: default
@@ -1717,6 +1717,7 @@ ggplot(top_negative_words, aes(x = reorder(word, n), y = n)) +
  <li>The customer feedback analysis revealed that over 75% of responses were positive, emphasizing service satisfaction.</br>
  <li>However, critical insights from negative feedback highlighted operational gaps in the bank’s service delivery and suggesting the need for process improvements and enhanced staff responsiveness to better meet customer expectations.</ul>
 </div>
+
 
 
 
