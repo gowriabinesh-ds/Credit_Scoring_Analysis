@@ -1,7 +1,7 @@
 # 💳 Credit Scoring Analysis & Default Prediction
 
-An **end-to-end Data Science project** focused on analysing and mitigating **credit default risk** in a retail banking context. <br>
-This project combines **statistical modeling, machine learning, and customer sentiment analysis** to identify high-risk borrowers and evaluate service quality.
+An **end-to-end Data Science project** focused on analysing and mitigating **credit default risk** in a retail banking context.  <br>
+This project demonstrates how credit risk decisions can be improved by combining **business-driven EDA**, **interpretable statistical models**, **machine learning**, and **customer sentiment analysis** to identify high-risk borrowers and service improvement opportunities.
 
 ---
 
