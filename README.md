@@ -45,7 +45,7 @@ The analysis follows a **structured five-phase data science lifecycle** commonly
 
 ---
 
-## 📈 Exploratory Data Analysis (EDA) – Key Visual Insights
+## 📈 Exploratory Data Analysis (EDA) - Key Visual Insights
 
 ### 🔍 Default Risk by Credit & Financial Factors
 This visualization highlights how default risk increases sharply with **higher debt-to-income ratios** and **shorter employment duration**, confirming financial stability as a critical risk driver.
@@ -80,12 +80,6 @@ This heatmap reveals geographic and demographic concentrations of default risk, 
 The radial chart summarizes the average risk profile, clearly showing that defaulters carry **higher debt burdens** and demonstrate **lower stability indicators**.
 
 ![Mean Risk Profile Radial Chart](outputs/mean_by_good_vs_bad_radial_chart.png)
-
----
-
-## 🌍 Live Report (GitHub Pages)
-
-➡️ View the full HTML report here: **[https://github.com/gowriabinesh-ds/Credit_Scoring_Analysis/blob/main/docs/credit_scoring_report.html]**
 
 ---
 
