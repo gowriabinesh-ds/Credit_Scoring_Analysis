@@ -1,52 +1,97 @@
-# Credit Scoring Analysis & Default Prediction
+# 💳 Credit Scoring Analysis & Default Prediction
 
-An end-to-end Data Science project focused on analyzing and mitigating credit default risks for a UK-based financial institution. This project integrates statistical modeling, machine learning, and sentiment analysis to identify high-risk borrowers and understand customer service satisfaction.
+An **end-to-end Data Science project** focused on analysing and mitigating **credit default risk** in a retail banking context. <br>
+This project combines **statistical modeling, machine learning, and customer sentiment analysis** to identify high-risk borrowers and evaluate service quality.
 
 ---
 
 ## 🚀 Project Overview
-This project aims to strengthen credit scoring practices by analyzing demographic, financial, and behavioral data. The analysis follows a rigorous 5-phase data science lifecycle:
 
-1. **Data Management:** Merging disparate datasets, cleaning, and handling outliers.
+This project aims to strengthen credit scoring practices by analysing **demographic, financial, and behavioural data**.  <br>
+The analysis follows a **structured five-phase data science lifecycle** commonly used in real-world risk analytics projects:
 
-2. **Exploratory Data Analysis (EDA):** Identifying key risk drivers.
+1. **Data Management**  
+   - Understanding and validating multiple datasets  
+   - Data cleaning, merging, and outlier handling  
 
-3. **Statistical Modeling:** Building a credit scorecard using Logistic Regression.
+2. **Exploratory Data Analysis (EDA)**  
+   - Identifying key risk drivers  
+   - Analysing defaulter (bad) rates across segments  
 
-4. **Machine Learning Comparison:** Evaluating Random Forest, Decision Trees, and Naïve Bayes.
+3. **Statistical Modeling**  
+   - Developing a **credit scorecard** using Binary Logistic Regression  
 
-5. **Sentiment Analysis:** Mining customer feedback to improve service quality.
+4. **Machine Learning Comparison**  
+   - Evaluating **Random Forest, Decision Tree, and Naïve Bayes** models  
+   - Comparing performance using **ROC** and **AUC** metrics  
+
+5. **Sentiment Analysis**  
+   - Analysing customer feedback to assess service quality and pain points  
 
 ---
 
 ## 📊 Key Insights
-* **Default Rate:** The overall defaulter rate in the dataset is 13.23%.
 
-* **Risk Drivers:**
-* **Financial Stress:** Customers with high debt-to-income ratios (over 16%) show a significantly higher default rate of 22.1%.
-* **Stability:** New employees (less than 3 years) have a high default risk of 21.6%, compared to only 3.41% for long-term employees (over 13 years).
-* **Customer Sentiment:** Text mining revealed that while 75% of feedback is positive, dissatisfaction is primarily driven by "slow" processing and "lack of proactive support".
+- **Overall Default Rate:**  
+  The overall defaulter rate in the dataset is **13.23%**.
 
-  ---
+- **Key Risk Drivers Identified:**  
+  - **Financial Stress:** Customers with a **debt-to-income ratio above 16%** exhibit a significantly higher default rate of **22.1%**.  
+  - **Employment Stability:** Customers with **less than 3 years of employment** show a default rate of **21.6%**, compared to **3.41%** for those employed for **more than 13 years**.  
+
+- **Customer Sentiment:**  
+  - Approximately **75% of customer feedback is positive**.  
+  - Negative sentiment is primarily driven by **slow processing times** and **lack of proactive support**, highlighting operational improvement areas.
+
+---
 
 ## 🛠️ Tech Stack
-* **Language:** R
-* **Libraries:** tidyverse (dplyr, ggplot2, tidyr), patchwork, caret, randomForest, tidytext.
-* **Methods:** Binary Logistic Regression, Random Forest, Naïve Bayes, Decision Trees, Sentiment Analysis.
+
+- **Language:** R  
+- **Libraries:**  
+  - tidyverse (dplyr, ggplot2, tidyr)  
+  - caret  
+  - randomForest  
+  - tidytext  
+  - patchwork  
+- **Methods & Techniques:**  
+  - Binary Logistic Regression  
+  - Random Forest  
+  - Naïve Bayes  
+  - Decision Trees  
+  - Text Mining & Sentiment Analysis  
 
 ---
 
 ## 📂 Repository Structure
-`data/`: Contains structured CSV datasets (Credit Details, Customer Info, Profiles) and unstructured customer feedback text document.
-`Credit_Scoring_Analysis.Rmd`: The core analysis Rmd file. 
-`outputs/`: Visual evidence of the outputs
-`credit_scoring_project_presentation.ppt`: Summary of this project and insights
-`README.md`: (This file) Detailed project overview and summary. 
+
+- **data/** – Structured and unstructured datasets used for analysis  
+- **credit_scoring_analysis.Rmd** – Core analysis and modeling workflow  
+- **outputs/** – Visual outputs (EDA, model evaluation, sentiment analysis)  
+- **credit_scoring_project_presentation.pptx** – Executive summary of insights  
+- **variable_definitions.xlsx** – Detailed data dictionary for variables  
 
 ---
 
 ## 🏁 Conclusion
-The project successfully identified that financial stability indicators, particularly debt-to-income and employment duration, are the strongest predictors of default. <br> The Random Forest model was selected as the final predictive tool based on its superior performance across test AUC metrics.
+
+This project demonstrates how **data-driven credit risk analytics** can support better lending decisions.  
+Financial stability indicators, particularly **debt-to-income ratio** and **employment duration** were identified as the strongest predictors of default.
+
+Among all models tested, **Random Forest** delivered the **best overall performance** based on test-set AUC and was selected as the final predictive model.
+
+---
+
+## ⭐ Key Skills Demonstrated
+
+- Credit Risk & Default Analysis  
+- Exploratory Data Analysis (EDA)  
+- Statistical Modeling & Scorecard Development  
+- Machine Learning Model Comparison  
+- Model Evaluation (ROC, AUC, Confusion Matrix)  
+- Customer Sentiment Analysis  
+- Business-focused Insight Communication  
+
 
 
 
