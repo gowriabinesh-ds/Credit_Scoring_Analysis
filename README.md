@@ -45,6 +45,44 @@ The analysis follows a **structured five-phase data science lifecycle** commonly
 
 ---
 
+## 📈 Exploratory Data Analysis (EDA) – Key Visual Insights
+
+### 🔍 Default Risk by Credit & Financial Factors
+This visualization highlights how default risk increases sharply with **higher debt-to-income ratios** and **shorter employment duration**, confirming financial stability as a critical risk driver.
+
+![Bad Rate by Credit & Financial Factors](outputs/bad_rates_by_credit_financial_variables.png)
+
+---
+
+### 🔗 Interaction of Employment Stability & Debt-to-Income
+The bubble matrix shows interaction effects between employment duration and debt burden.  
+Newly employed customers with **high debt-to-income ratios** exhibit the **highest default risk**, while long-tenured customers remain low-risk across debt levels.
+
+![Employment vs Debt Bubble Matrix](outputs/bad_rate_by_employment_and_debt_bubble_plot.png)
+
+---
+
+### 📦 Distribution of Numeric Risk Indicators (Good vs Bad)
+Box-whisker plots compare numeric variables between defaulters and non-defaulters, showing that defaulters generally have **higher debt levels** and **shorter employment and address durations**.
+
+![Numeric Risk Distributions](outputs/numeric_variables_boxwhisker_plot.png)
+
+---
+
+### 🌍 Default Risk by Gender and Zone
+This heatmap reveals geographic and demographic concentrations of default risk, helping identify **high-risk zones** and segment-level variations.
+
+![Gender Zone Heatmap](outputs/bad_rate_by_gender_and_zone_heatmap.png)
+
+---
+
+### 🧭 Mean Risk Profile: Good vs Bad Customers
+The radial chart summarizes the average risk profile, clearly showing that defaulters carry **higher debt burdens** and demonstrate **lower stability indicators**.
+
+![Mean Risk Profile Radial Chart](outputs/mean_by_good_vs_bad_radial_chart.png)
+
+---
+
 ## 🛠️ Tech Stack
 
 - **Language:** R  
@@ -75,10 +113,9 @@ The analysis follows a **structured five-phase data science lifecycle** commonly
 
 ## 🏁 Conclusion
 
-This project demonstrates how **data-driven credit risk analytics** can support better lending decisions.  
-Financial stability indicators, particularly **debt-to-income ratio** and **employment duration** were identified as the strongest predictors of default.
-
-Among all models tested, **Random Forest** delivered the **best overall performance** based on test-set AUC and was selected as the final predictive model.
+This project demonstrates how **data-driven credit risk analytics** can support better lending decisions.  <br>
+Financial stability indicators, particularly **debt-to-income ratio** and **employment duration** were identified as the strongest predictors of default. <br>
+Among all models tested, **Random Forest** delivered the **best overall performance** based on test-set AUC and was selected as the final predictive model. <br>
 
 ---
 
@@ -90,7 +127,9 @@ Among all models tested, **Random Forest** delivered the **best overall performa
 - Machine Learning Model Comparison  
 - Model Evaluation (ROC, AUC, Confusion Matrix)  
 - Customer Sentiment Analysis  
-- Business-focused Insight Communication  
+- Business-focused Insight Communication
+
+---
 
 
 
