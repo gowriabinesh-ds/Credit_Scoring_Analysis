@@ -85,7 +85,7 @@ The radial chart summarizes the average risk profile, clearly showing that defau
 
 ## 🌍 Live Report (GitHub Pages)
 
-➡️ View the full HTML report here: **(paste your GitHub Pages link here)**
+➡️ View the full HTML report here: **[https://github.com/gowriabinesh-ds/Credit_Scoring_Analysis/blob/main/docs/credit_scoring_report.html]**
 
 ---
 
