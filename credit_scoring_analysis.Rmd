@@ -1,0 +1,1723 @@
+---
+title: "<span style='font-size:38px;color:maroon;'>Capstone Project_Credit Scoring</span><br><span style='font-size:18px;'>R. Gowri Lakshani</span>"
+output: 
+  html_document:
+    df_print: default
+    toc: true
+    toc_depth: 3
+    number_sections: false
+    theme: cosmo
+---
+
+<style>
+/* General layout */
+body {
+  font-family: Arial, sans-serif;
+}
+
+/* Phase headers */
+.phase {
+  font-size: 28px;
+  color: #2c3e50;
+  margin-top: 40px;
+  margin-bottom: 20px;
+}
+
+/* Question headers */
+.question {
+  font-size: 20px;
+  font-weight: bold;
+  margin-top: 20px;
+}
+
+/* Reasoning/comments */
+.reasoning {
+  font-size: 16px;
+  font-style: italic;
+  margin-bottom: 10px;
+}
+
+/* Code styling */
+pre, code {
+  font-family: "Consolas", "Courier New", monospace;
+  font-size: 13px;
+  background-color: #f9f9f9;
+  padding: 10px;
+  border-radius: 4px;
+}
+
+/* Interpretation styling */
+.interpretation {
+  font-size: 15px;
+  color: #000080;
+  margin-top: 10px;
+  margin-bottom: 20px;
+}
+</style>
+
+<div class="phase">Phase 1: Data Management</div>
+
+<div class="question">1. Understand Datasets</div>
+
+```{r libraries, message=FALSE, warning=FALSE}
+# Importing required libraries
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+library(forcats)
+library(purrr)
+library(patchwork)
+library(ggridges)
+
+# Import datasets
+customer_credit <- read.csv(file.choose(), header = TRUE)
+customer_info <- read.csv(file.choose(), header = TRUE)
+customer_profile<- read.csv(file.choose(), header = TRUE)
+```
+
+<div class="reasoning"> Using a custom function to quickly check the structure, dimensions, and summary statistics of each dataset. </div>
+
+```{r}
+# Function to explore datasets
+data_check <- function(data) {
+  print(head(data)); cat("Dimensions:", paste(dim(data), collapse = " x "), "\n")
+  print(str(data)); print(summary(data))
+}
+
+# Apply the function to each dataset 
+data_check(customer_credit)
+data_check(customer_info)
+data_check(customer_profile)
+
+# Checking for duplicates 
+lapply(list(customer_credit, customer_info, customer_profile), 
+       \(data) data %>% filter(custid %in% custid[duplicated(custid)]))
+```
+
+<div class="interpretation"> - The customer_credit dataset has duplicate custid rows with inconsistent data (some rows have NA values). </div>
+
+```{r}
+# Removing incomplete duplicate rows from customer_credit dataset to ensure data quality.
+
+cleaned_customer_credit <- customer_credit %>%
+  group_by(custid) %>%
+  filter(if (n() == 1) TRUE else complete.cases(pick(everything()))) %>%
+  ungroup()
+
+cleaned_customer_credit %>% filter(custid %in% custid[duplicated(custid)])
+
+sum(duplicated(cleaned_customer_credit$custid))
+```
+
+<div class="question">2. Merging 3 structured data sets and creating a master data </div>
+
+```{r}
+master_data <- full_join(full_join(customer_info, cleaned_customer_credit, by = "custid"), 
+                         customer_profile, by = "custid")
+head(master_data)
+
+dim(master_data)
+```
+
+<div class="question">3. Data cleaning </div>
+
+```{r}
+# Checking missing values
+colSums(is.na(master_data))
+```
+
+<div class="reasoning"> 
+ - There are only 4 NA values in one column (othdebt).<br>
+ - Removing rows with missing values as they account for a negligible proportion of the dataset and are unlikely to impact analysis. 
+</div>
+
+```{r}
+master_data <- na.omit(master_data)
+dim(master_data)
+```
+
+<div class="reasoning"> Checking duplicated values </div>
+
+```{r}
+master_data%>% filter(custid %in% custid[duplicated(custid)])
+colSums(is.na(master_data))
+
+str(master_data)
+```
+
+<div class="reasoning"> Checking unique values and frequencies </div>
+
+```{r}
+# List of categorical variables to analyze
+columns_to_analyze <- c("preloan", "veh", "house", "selfemp", "account", 
+                        "deposit", "branch", "ref", "gender", "ms", 
+                        "child", "bad")
+
+# Print unique values and their frequencies in a clean tabular format
+for (col in columns_to_analyze) {
+  freq_table <- table(master_data[[col]])
+  cat(sprintf("%-10s | %-20s | %s\n", col, 
+              paste(names(freq_table), collapse = ", "), 
+              paste(freq_table, collapse = ", ")))
+}
+```
+
+<div class="interpretation"> - Output shows that only 1 occurrence of an error value in each variable (preloan, veh, selfemp, deposit) and makes it clear that the issue affects only a very small fraction of the data. 
+- Therefore, it is more appropriate to correct these few entries. </div>
+
+
+<div class="reasoning"> Replacing the incorrect values since those appear only a few times </div>
+
+```{r}
+# Defining the replacements as a named list
+replacements <- list(
+  preloan = c("11" = 1),
+  veh = c("11" = 1, "22" = 2),
+  selfemp = c("11" = 1),
+  deposit = c("11" = 1)
+)
+
+# Apply replacements
+master_data[names(replacements)] <- lapply(names(replacements), function(col) {
+  replace(master_data[[col]], master_data[[col]] %in% as.numeric(names(replacements[[col]])), 
+          as.numeric(unname(replacements[[col]])))
+})
+```
+
+<div class="reasoning"> Converting categorical variables into factors </div>
+
+```{r}
+# Defining a mapping of columns to their factor levels and labels
+factor_mapping <- list(
+  age = c("<32", "32-48", ">48"), 
+  gender = c("Female", "Male"),
+  ms = c("Single", "Married"),
+  child = c("Zero or One", "More than One"),
+  veh = c("No Vehicle", "Own Vehicle"),
+  house = c("No House", "Own House"),
+  selfemp = c("Not Self Employed", "Self Employed"),
+  account = c("Other Bank", "Same Bank (CASA)"),
+  deposit = c("No Deposit", "Has Deposit"),
+  branch = c("Other Branch", "Nearest Branch"),
+  ref = c("No Reference", "Internal Reference"),
+  preloan = c("First Loan", "Not First Loan"),
+  zone = NULL,  
+  bad = NULL
+)
+
+# Convert specified columns to factors with labels
+master_data <- master_data %>%
+  mutate(across(all_of(names(factor_mapping)), ~ {
+    if (is.null(factor_mapping[[cur_column()]])) {
+      # Convert to factor without labels
+      as.factor(.)
+    } else {
+      # Convert to factor with specified labels
+      factor(., labels = factor_mapping[[cur_column()]])
+    }
+  }))
+```
+
+<div class="reasoning">  Converting Employment & Address columns to numeric </div>
+
+```{r}
+numeric_columns <- c("emp", "address")
+
+master_data <- master_data %>%
+  mutate(across(all_of(numeric_columns), as.numeric))
+
+str(master_data)
+```
+
+<div class="interpretation"> - Categorical variables are converted into factors with meaningful labels (e.g., "Male"/"Female") to improve interpretability and analysis readiness.
+- Variables like emp (employment duration) and address are converted to numeric format to enable mathematical operations.
+- Properly formatted data ensures compatibility with models, visualizations, and statistical tools.</div>
+
+
+<div class="question">4. Checking outliers </div>
+
+<div class="reasoning"> IQR-Based Method </div>
+
+```{r}
+# Defining a function to detect IQR-based outliers
+detect_outliers <- function(x) {
+  q1 <- quantile(x, 0.25, na.rm = TRUE)
+  q3 <- quantile(x, 0.75, na.rm = TRUE)
+  iqr <- q3 - q1
+  lower_bound <- q1 - 1.5 * iqr
+  upper_bound <- q3 + 1.5 * iqr
+  return(x < lower_bound | x > upper_bound)
+}
+
+# List of variables to check for outliers
+numeric_vars <- c("emp", "address", "debtinc", "creddebt", "othdebt")
+
+# Creating a list to store outlier flags
+outlier_flags_list <- lapply(numeric_vars, function(col) {
+  detect_outliers(master_data[[col]])
+})
+
+names(outlier_flags_list) <- paste0(numeric_vars)
+
+# Count and display the number of outliers for each variable
+outlier_counts <- sapply(outlier_flags_list, sum, na.rm = TRUE)
+outlier_counts
+```
+
+<div class="interpretation"> - The data set contains varying numbers of outliers across different numeric variables.
+- Specifically, othdebt has the highest number of outliers (515), followed by creddebt (372), debtinc (137), emp (65), and address (40). </div>
+
+<div class="reasoning"> Boxplots for visualizing outliers </div>
+
+```{r}
+# Reshaping data to long format for ggplot
+long_data <- master_data %>%
+  select(all_of(c("emp", "address", "debtinc", "creddebt", "othdebt"))) %>%
+  pivot_longer(cols = everything(), names_to = "variable", values_to = "value")
+
+# Defining a custom color palette
+custom_colors <- c(
+  "emp" = "lightblue",       
+  "address" = "lightgreen",   
+  "debtinc" = "pink",   
+  "creddebt" = "#fdbf6f", 
+  "othdebt" = "#cab2d6"    
+)
+
+# Creating boxplots using ggplot2
+ggplot(long_data, aes(x = variable, y = value, fill = variable)) +
+  geom_boxplot(outlier.color = "black", outlier.size = 1) +  
+  labs(title = "Boxplots of Numeric Variables",
+       x = "Variable",
+       y = "Value",
+       fill = "Variable") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_manual(values = custom_colors) +  
+  guides(fill = guide_legend(title = "Variables"))  
+```
+
+<div class="interpretation"> - The boxplots provide a visual summary of the distribution of each numeric variable (address, creddebt, debtinc, emp, othdebt).
+- Address (Years at current address): Most values cluster around 3–13 years, with a few outliers extending up to 35 years.
+- Creddebt (Balance CC debt): Values are tightly clustered around 1-3 years, indicating low credit card debt for most customers, with some outliers extends beyond 20.
+- Debtinc (Loan to income ratio): The majority of values fall within the 7–16 range, but there is a significant tail of outliers extending beyond 30.
+- Emp (Years with current employer): Values are concentrated between 3–13 years, with a few outliers exceeding 30 years.
+- Othdebt (Any other debt): Similar to emp, most values are below 5, but there is a long tail of outliers extending up to 30. </div>
+
+<div class="reasoning"> Evaluating the Impact of Outliers </div>
+
+```{r}
+# 1. Extract Rows with Outliers
+
+# Function to extract outliers (above 95th percentile)
+extract_outliers <- function(data, var) {
+   data[data[[var]] > quantile(data[[var]], 0.95, na.rm = TRUE), ]
+   }
+
+# Extract outliers for all numeric variables
+outliers_list <- lapply(numeric_vars, function(var) {
+   extract_outliers(master_data, var)
+    })
+
+# Combine all outlier rows into one dataset
+all_outliers <- do.call(rbind, outliers_list) %>%
+  distinct()  
+
+head(all_outliers)
+```
+
+<div class="interpretation"> - The all_outliers dataset identifies rows where numeric variables exceed the 95th percentile, highlighting extreme values such as high debtinc, creddebt, or othdebt. 
+- These outliers often represent genuine high-risk profiles rather than errors.
+- Example: A customer with custid = 28 has a very high debtinc (18.31) and othdebt (11.56), indicating a valid but risky borrower profile. </div>
+
+```{r}
+# 2. Visualizing relationships between all numerical variables
+
+# Scatterplot matrix for all numeric variables
+par(mar = c(6, 4, 4, 2), xpd = TRUE)
+
+# Scatterplot matrix
+pairs(master_data[, numeric_vars],
+      main = "Scatterplot Matrix of Numerical Variables",
+      col = ifelse(row.names(master_data) %in% row.names(all_outliers), "#440154", "lightpink"),
+      pch = 19,
+      labels = c("Years with Employer", "Years at Address", "Loan-to-Income Ratio", 
+                 "Credit Card Debt", "Other Debt"))
+
+legend("bottom",           
+       inset = -0.15,     
+       legend = c("Outliers", "Non-Outliers"),
+       col = c("#440154", "lightpink"),
+       pch = 19,
+       horiz = TRUE,       
+       cex = 0.8,         
+       pt.cex = 0.8,       
+       bty = "n") 
+```
+
+<div class="interpretation"> - The scatterplot shows that outliers (purple dots) tend to appear in similar regions across multiple variables, suggesting potential underlying patterns or relationships.
+- Example: High loan to income ratios often correspond to high credit card debt or other debt.
+- This consistent alignment of outliers across variables indicates that they are not random errors but may represent genuine high-risk customer profiles. </div>
+
+```{r, message=FALSE, warning=FALSE}
+# 3. Summary statistics for all numeric variables
+summary_stats <- master_data %>%
+  select(numeric_vars) %>%
+  pivot_longer(cols = everything(), names_to = "Variable", values_to = "Value") %>%
+  group_by(Variable) %>%
+  summarise(
+    Min = min(Value, na.rm = TRUE),
+    Q1 = quantile(Value, 0.25, na.rm = TRUE),
+    Median = median(Value, na.rm = TRUE),
+    Mean = mean(Value, na.rm = TRUE),
+    Q3 = quantile(Value, 0.75, na.rm = TRUE),
+    Max = max(Value, na.rm = TRUE)
+  )
+
+summary_stats
+```
+
+<div class="interpretation"> - The summary statistics reveal significant differences between minimum, median, and maximum values for each variable.
+- Example: debtinc has a median of 11.3 but a maximum of 45.3, indicating extreme values.
+- The summary statistics confirm that outliers are extreme but reasonable values, representing high-risk borrowers.<br><br>
+- <b>Conclusion:</b> The combination of the all_outliers dataset, scatterplot matrix, and summary statistics provides a comprehensive view of outliers. 
+- These outputs demonstrate that most outliers are valid high-risk profiles rather than errors. 
+- Therefore, outliers should be retained to maintain valuable information about high-risk customers.</div>
+
+<div class="question">5. Check numerical variables for possible recoding </div>
+ 
+<div class="reasoning"> - Recoding numerical variables into categories helps capture non-linear relationships, simplify risk segmentation, and group similar risk profiles to make the model easier to interpret.<br>
+- Recoding thresholds were determined based on the output from summary_stats of numerical variables. </div>
+
+```{r}
+# Defining a recoding function
+recode_numeric <- function(x, thresholds, labels) {
+  case_when(
+    x < thresholds[1] ~ labels[1],
+    x >= thresholds[1] & x <= thresholds[2] ~ labels[2],
+    x > thresholds[2] ~ labels[3]
+  ) %>%
+    factor(levels = labels)
+}
+
+# Applying recoding
+master_data <- master_data %>%
+  mutate(
+    emp_cat = recode_numeric(emp, c(3, 13), c("New", "Medium", "Long")),
+    address_cat = recode_numeric(address, c(3, 13), c("New", "Medium", "Long")),
+    debtinc_cat = recode_numeric(debtinc, c(7, 16), c("Low", "Moderate", "High")),
+    creddebt_cat = recode_numeric(creddebt, c(2, 4), c("Low", "Moderate", "High")),
+    othdebt_cat = recode_numeric(othdebt, c(2, 5), c("Low", "Moderate", "High"))
+  )
+
+head(master_data)
+```
+
+<div class="question">6. Find the overall Defaulter Rate in the data </div>
+
+```{r}
+overall_defaulter_rate <- mean(master_data$bad == "1", na.rm = TRUE)
+overall_defaulter_rate
+```
+
+<div class="interpretation"> - The overall defaulter rate in the dataset is approximately 13.23% , indicating that about 13.23% of the customers in the dataset are classified as defaulters. </div>
+
+
+<div class="phase">Phase 2: Data Analysis (EDA) </div>
+
+<div class="question">1. Box-Whisker Plots for Numeric Variables by "Bad" </div>
+
+```{r boxplot-code, echo=TRUE, eval=FALSE, message=FALSE, warning=FALSE}
+# Create a mapping of numeric variable names to descriptive names
+numericvar_names <- c(
+  "emp" = "Employment Duration",
+  "debtinc" = "Loan-to-Income Ratio",
+  "address" = "Address Duration",
+  "creddebt" = "Credit Card Debt",
+  "othdebt" = "Any Other Debt"
+)
+
+# Create a list to store all plots
+plot_list <- list()
+
+# Loop through each numeric variable and create boxplots
+for (var in numeric_vars) {
+  descriptive_name <- numericvar_names[var]
+  
+  p <- ggplot(master_data, aes(x = factor(bad), y = .data[[var]], fill = factor(bad))) +
+    geom_boxplot(draw_quantiles = NULL) + 
+    scale_fill_manual(
+      values = c("0" = "darkolivegreen2", "1" = "tan1"),
+      labels = c("0" = "Good", "1" = "Bad") 
+    ) +
+    labs(title = paste(descriptive_name),
+         y = descriptive_name,
+         fill = NULL) + 
+    theme_minimal() +
+    theme(
+      plot.title = element_text(hjust = 0.5, color = "slateblue4"),  
+      axis.title.x = element_blank(), 
+      legend.position = "none"      
+    )
+  
+  # Add the plot to the list
+  plot_list[[var]] <- p
+}
+
+# Combine all plots in a grid using patchwork
+combined_plot <- wrap_plots(plot_list, ncol = 2)  
+
+# Add a common title for the entire combined plot
+combined_plot_with_title <- combined_plot + 
+  plot_annotation(
+    title = "Box-Whisker Plots for Numeric Variables",
+    theme = theme(
+      plot.title = element_text(hjust = 0.5, size = 16)
+    )
+  )
+
+# Add a global legend and x-axis label
+combined_plot_final <- combined_plot_with_title +
+  labs(
+    x = "Bad Status (0 = Good, 1 = Bad)",
+    fill = "Bad Status"
+  ) +
+  scale_fill_manual(
+    values = c("0" = "darkolivegreen2", "1" = "tan1"),
+    labels = c("0" = "0 : Non-defaulters", "1" = "1 : Defaulters")
+  ) +
+  theme(legend.position = "right")
+
+combined_plot_final
+```
+![](Plots/Boxwhisker_plot.png){width=100%}
+
+<div class="interpretation">
+  <span style="font-weight:bold;">Employment Duration:</span>
+  <ul style="margin-top: 5px; margin-left: 20px;">
+    <li>Customers who have been employed for shorter durations tend to have higher default rates.</li>
+    <li>The median employment duration for defaulters (Bad Status = 1) is noticeably lower than for non-defaulters (Bad Status = 0), suggesting that job instability may be a significant risk factor.</li>
+  </ul>
+</div>
+
+<div class="interpretation">
+  <span style="font-weight:bold;">Address Duration:</span>
+  <ul style="margin-top: 5px; margin-left: 20px;">
+    <li>Customers with shorter durations at their current address show higher default rates.</li>
+    <li>The median residential stability for defaulters is lower compared to non-defaulters, indicating that frequent moves might correlate with increased credit risk.</li>
+  </ul>
+</div>
+
+<div class="interpretation">
+  <span style="font-weight:bold;">Loan to Income Ratio:</span>
+  <ul style="margin-top: 5px; margin-left: 20px;">
+    <li>Defaulters exhibit significantly higher loan to income ratio compared to non-defaulters, making it a strong predictor of default.</li>
+    <li>Several outliers are observed among good customers which highlights variability in financial stability among low-risk borrowers.</li>
+  </ul>
+</div>
+
+<div class="interpretation">
+  <span style="font-weight:bold;">Credit Card Debt:</span>
+  <ul style="margin-top: 5px; margin-left: 20px;">
+    <li>Both groups, defaulters and non-defaulters show similar distributions of credit card debt.</li>
+    <li>he slight increase in median credit card debt among defaulters suggests it may still contribute to default risk, though it's discriminative power is weaker compared to other variables.</li>
+  </ul>
+</div>
+
+<div class="interpretation">
+  <span style="font-weight:bold;">Any Other Debt:</span>
+  <ul style="margin-top: 5px; margin-left: 20px;">
+    <li>Defaulters have notably higher and more dispersed values for other debts, indicating broader financial strain beyond credit cards.</li>
+    <li>This variable highlights the cumulative impact of total debt on default probability.</li>
+  </ul>
+</div>
+
+
+<div class="question">2. Table of "Bad Rate" for Categorical Variables </div>
+
+```{r}
+# List of All Categorical Variables (Original + Recoded)
+categorical_vars <- c("age", "gender", "veh", "house", "selfemp", "account", "deposit", 
+                      "branch", "ref", "preloan", "ms", "child", "zone",
+                      "emp_cat", "address_cat", "debtinc_cat", "creddebt_cat", 
+                      "othdebt_cat")
+
+# Function to Calculate Bad Rate for a Single Variable
+calculate_bad_rate <- function(data, var) {
+  data %>%
+    group_by(!!sym(var)) %>%  
+    summarise(
+      Total = n(),               
+      Defaulters = sum(bad == "1"),  
+      Bad_Rate = round((Defaulters / Total) * 100, 2)  
+    ) %>%
+    ungroup()
+}
+
+# Loop Through All Categorical Variables and Create Bad Rate Tables
+bad_rate_tables <- lapply(categorical_vars, function(var) {
+  bad_rate <- calculate_bad_rate(master_data, var)
+  colnames(bad_rate)[1] <- var  
+  return(bad_rate)
+})
+
+# Combine Results into a Named List for Easy Access
+names(bad_rate_tables) <- categorical_vars
+
+# Print Bad Rate Tables for Each Variable
+for (var in categorical_vars) {
+  cat("\nBad Rate Table for", var, ":\n")
+  print(bad_rate_tables[[var]])
+}
+```
+
+<div class="interpretation">- Age <32 (13.8%) and >48 (13.5%) show higher defaults than 32–48 (12.4%); males (13.6%) default more than females (12.8%).
+- Owning a house (14.0%) and being self-employed (13.4%) slightly increase risk; vehicle ownership and deposits show minimal impact.
+- Customers from “Other Branch” (14.8%) and with “No Reference” (14.2%) have higher defaults, while nearest branch (11.5%) and internal reference (12.3%) reduce risk.
+- New employees (21.6%) and new/medium-term residents (14.4%–15.1%) show higher default risk vs. long-term stability (employment 3.41%, address 7.46%).
+- High debt-to-income (22.1%), credit debt (16.7%), and other debt (14.9%) significantly raise default risk, highlighting key financial stress indicators.</div>
+
+<div class="reasoning"> - Horizontal Grouped Bar Plot to visualize the Bad Rate across categorical variables.
+- Categorical variables are grouped into three categories: Demographic, Credit & Financial, and Customer Relationship & Ownership.</div>
+
+```{r, echo=TRUE, eval=FALSE, message=FALSE, warning=FALSE}
+# Combining all bad rate tables
+bad_rate_combined <- purrr::map2_dfr(
+  bad_rate_tables, categorical_vars,
+  ~ .x %>% 
+    mutate(Variable = .y, Category = .x[[1]]) %>% 
+    select(Variable, Category, Bad_Rate)
+)
+
+# Defining clear names for variables
+clear_names <- c(
+  address_cat = "Address Duration", emp_cat = "Employment Duration",
+  debtinc_cat = "Loan-to-Income Ratio", creddebt_cat = "Balance CC Debt",
+  othdebt_cat = "Any Other Debt", age = "Age Group", gender = "Gender",
+  veh = "Vehicle Ownership", house = "House Ownership", selfemp = "Self Employment",
+  account = "Account Type", deposit = "Deposit Status", branch = "Branch Type",
+  ref = "Reference Type", preloan = "Loan History", ms = "Marital Status",
+  child = "Children", zone = "Zone"
+)
+
+# Defining grouping rules
+grouping <- c(
+  "Demographic" = "age|gender|ms|child|zone",
+  "Credit & Financial" = "debtinc_cat|creddebt_cat|othdebt_cat|emp_cat|address_cat|preloan|deposit|selfemp",
+  "Customer Relationship & Ownership" = "veh|house|branch|ref|account"
+)
+
+# Creating the grouping vector
+grouping_vector <- unlist(lapply(names(grouping), function(group) {
+  setNames(rep(group, length(unlist(strsplit(grouping[group], "\\|")))), 
+           unlist(strsplit(grouping[group], "\\|")))
+}))
+
+# Assigning readable names and groupings
+bad_rate_combined <- bad_rate_combined %>%
+  mutate(
+    Clear_Variable = clear_names[Variable],
+    Group = grouping_vector[Variable],
+    Category = fct_reorder(as.character(Category), Bad_Rate)  
+  )
+
+# Plotting function with percentage labels
+plot_grouped_horizontal <- function(data, title) {
+  ggplot(data, aes(x = Bad_Rate, y = Category, fill = Clear_Variable)) +
+    geom_col(position = "dodge") +
+    geom_text(aes(label = paste0(round(Bad_Rate, 1), "%")), 
+              position = position_dodge(width = 0.9), 
+              hjust = 0, vjust = 0.5, size = 4) + 
+    facet_wrap(~ Clear_Variable, scales = "free_y", ncol = 2) +
+    labs(title = title, x = "Bad Rate (%)", y = "Category") +
+    theme_minimal() +
+    theme(
+      strip.text = element_text(face = "bold", size = 12),
+      axis.text.y = element_text(size = 10),
+      plot.title = element_text(hjust = 0.5, face = "bold"),
+      legend.position = "none",
+      plot.margin = margin(10, 40, 10, 10)
+    ) +
+    scale_fill_brewer(palette = "Set3")
+}
+
+# Filter data by group
+grouped_data <- list(
+  Demographic = filter(bad_rate_combined, Group == "Demographic"),
+  Credit_Financial = filter(bad_rate_combined, Group == "Credit & Financial"),
+  Relationship_Ownership = filter(bad_rate_combined, Group == "Customer Relationship & Ownership")
+)
+
+# Remove empty groups
+grouped_data <- grouped_data[!sapply(grouped_data, nrow) == 0]
+
+# Generate and print plots
+grouped_data %>%
+  purrr::imap(~ plot_grouped_horizontal(.x, paste("Bad Rates by", .y, "Variables"))) %>%
+  purrr::walk(print)
+```
+![](Plots/BadRates_Demographic.png){width=100%}<br><br>
+![](Plots/BadRates_Credit_Financial.png){width=100%}<br><br>
+![](Plots/BadRates_Relationship_Ownership.png){width=100%}
+
+<div class="question">3. Radial Bar Charts for Mean/Median of Numeric Variables by "Bad" </div>
+
+```{r, echo=TRUE, eval=FALSE, message=FALSE, warning=FALSE}
+# Defining readable names in the chart for numeric variables
+numericvar_names2 <- c(
+  "emp" = "Emp Years",
+  "debtinc" = "Debt Income",
+  "address" = "Address Duration",
+  "creddebt" = "CC Debt",
+  "othdebt" = "Other Debt"
+)
+
+# Extract variable names from the mapping
+variables <- names(numericvar_names2)
+
+# Summarize mean and median for each numeric variable by bad status
+summary_stats <- master_data %>%
+  group_by(bad) %>%
+  summarise(across(all_of(variables), list(mean = ~ mean(.x, na.rm = TRUE), 
+                                           median = ~ median(.x, na.rm = TRUE)),
+                   .names = "{col}_{fn}")) %>%
+  pivot_longer(cols = starts_with(variables), names_to = c("Variable", "Statistic"), 
+               names_sep = "_", values_to = "Value") %>%
+  mutate(
+    Variable = factor(Variable, levels = variables),
+    Statistic = factor(Statistic, levels = c("mean", "median")),
+    bad = ifelse(bad == 0, "Good", "Bad"),
+    Variable_Name = numericvar_names2[as.character(Variable)]
+  )
+
+# Creating Radial Bar Charts with ggplot
+radial_bar_chart <- function(data, statistic) {
+  stat_title <- tools::toTitleCase(statistic)
+  
+  ggplot(data %>% filter(Statistic == statistic), 
+         aes(x = Variable_Name, y = Value, fill = bad)) +
+    geom_col(position = position_dodge(width = 0.8), width = 0.7) +
+    geom_text(aes(label = round(Value, 1), y = Value+0.8),
+              position = position_dodge(width = 0.8),
+              size = 4, fontface = "bold") +
+    coord_polar(theta = "x") +
+    labs(
+      title = paste("Radial Bar Chart:", stat_title, "by Good vs Bad Status"),
+      x = "", y = NULL, fill = "Status"
+    ) +
+    scale_fill_manual(values = c("Bad" = "plum4", "Good" = "khaki2")) +
+    theme_minimal(base_size = 13) +
+    theme(
+      axis.text.x = element_text(size = 11, angle = 0, color = "firebrick4", face= "bold", vjust = 1, hjust = 0.5),
+      axis.text.y = element_blank(),
+      axis.title.y = element_blank(),
+      panel.grid.major.y = element_blank(),
+      plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
+      legend.title = element_text(size = 12),
+      legend.text = element_text(size = 10),
+      plot.margin = margin(20, 30, 30, 30)
+    )
+}
+
+# Generate Separate Plots for Mean and Median
+mean_plot <- radial_bar_chart(summary_stats, "mean")
+median_plot <- radial_bar_chart(summary_stats, "median")
+
+mean_plot
+median_plot
+```
+
+![](Plots/Radial_mean.png){width=100%}<br><br>
+![](Plots/Radial_median.png){width=100%}
+
+<div class="interpretation"> - Both mean and median charts consistently show that Bad customers have higher Debt Income and lower Employment Years compared to Good customers.
+- The similarity between mean and median values indicates low skewness in these numeric variables which is confirming the trend is stable, not driven by outliers.
+- This comparison highlights that high debt burden and lower financial stability (less duration at employment/address) may be key indicators of credit risk.</div>
+
+
+<div class="question">4. Heatmap for Two Variables Showing "Bad Rate" </div>
+
+<div class="reasoning"> - Gender and Zone were chosen as both are original categorical variables and represent key demographic dimensions of customers.
+- A heatmap effectively highlights regional risk patterns by gender, especially with Zone’s high category count.</div>
+
+```{r, echo=TRUE, eval=FALSE, message=FALSE, warning=FALSE}
+heatmap_data <- master_data %>%
+  group_by(gender, zone) %>%
+  summarise(
+    Total = n(),
+    Defaulters = sum(bad == 1),
+    Bad_Rate = round((Defaulters / Total) * 100, 1),
+    .groups = "drop"
+  )
+
+heatmap_plot <- ggplot(heatmap_data, aes(x = zone, y = gender, fill = Bad_Rate)) +
+  geom_tile(color = "black") +
+  geom_text(aes(label = paste0(Bad_Rate, "%")), color = "black", size = 3.5, fontface = "bold") +
+  scale_fill_gradient(low = "#f0f9e8", high = "mediumorchid4", name = "Bad Rate (%)") +
+  labs(
+    title = "Heatmap of Bad Rate by Gender and Zone",
+    x = "Zone", y = "Gender"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    panel.grid = element_blank()
+  )
+
+heatmap_plot
+```
+![](Plots/Heatmap.png){width=100%}
+
+<div class="interpretation"> - The heatmap shows that bad rates vary significantly across zones and between genders, highlighting regional and demographic risk patterns.
+- Zone 2 consistently shows the highest bad rate for both males (27.2%) and females (23.2%), indicating it as a high-risk area for credit defaults.
+- In contrast, females in Zone 1 (5.2%) and Zone 4 (6%) show the lowest default rates, suggesting highly creditworthy segments.
+- This visualization clearly shows how looking at both gender and location together can uncover valuable insights to better target and manage credit risk.</div>
+
+
+
+<div class="reasoning"> - Years with current employer category (emp_cat) and debt-to-income level category (debtinc_cat) were chosen to visualize together as they are two key financial risk indicators that strongly influence default probability<br><br>
+- Categorical Bubble Matrix for emp_cat + debtinc_cat</div>
+
+```{r, echo=TRUE, eval=FALSE, message=FALSE, warning=FALSE}
+# Create summary table for bubble matrix
+bubble_data <- master_data %>%
+  group_by(emp_cat, debtinc_cat) %>%
+  summarise(
+    Total = n(),
+    Defaulters = sum(bad == 1),
+    Bad_Rate = round((Defaulters / Total) * 100, 1),
+    .groups = "drop"
+  )
+
+# Plot categorical bubble matrix
+bubbleplot <- ggplot(bubble_data, aes(x = debtinc_cat, y = emp_cat)) +
+  geom_point(aes(size = Total, color = Bad_Rate), alpha = 0.8) +
+  geom_text(aes(label = paste0(Bad_Rate, "%"), y = as.numeric(emp_cat) + 0.2),
+    fontface = "bold",
+    size = 4,
+    color = "black") +
+  scale_size_continuous(range = c(5, 20), name = "Customer Count") +
+  scale_color_gradient(low = "plum2", high = "darkred", name = "Bad Rate (%)") +
+  labs(
+    title = "Categorical Bubble Matrix: Bad Rate by Employment & Debt Levels",
+    x = "Debt-to-Income Category", y = "Employment Category"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    axis.title = element_text(face = "bold"),
+    axis.text = element_text(size = 11),
+    legend.position = "right"
+  )
+
+bubbleplot
+```
+![](Plots/Bubble_plot.png){width=100%}
+
+
+<div class="interpretation"> - The plot reveals that customers who are new employees and with high debt-to-income levels face the highest risk, with a bad rate of 28.8%.
+- On the other hand, those with long employment and low/moderate debt show near-zero default rates, marking them as the safest group.
+- The bubble size highlights that most customers fall into medium employment + moderate debt, a segment with moderate risk (11.9%).
+- This matrix makes it easy to spot which customer groups are riskier and which are safer, helping guide smarter decisions in credit strategy and model building.</div>
+
+
+<div class="reasoning"> - A ridgeline plot to visualize how credit card debt varies across age groups, and how it links to bad rates by giving a clear view of age-wise financial risk.</div><br><br>
+
+<div class="reasoning"><b>Ridgeline Plot</b></div>
+
+```{r, message=FALSE, warning=FALSE, fig.width=18, fig.height=12}
+ridgeline_plot <- ggplot(master_data, aes(x = creddebt, y = age, fill = as.factor(bad))) +
+  geom_density_ridges(alpha = 0.6, scale = 1.5, rel_min_height = 0.01) +
+  scale_fill_manual(values = c("0" = "pink2", "1" = "greenyellow"),
+                    labels = c("Good", "Bad"),
+                    name = "Bad Status") +
+  labs(
+    title = "Ridgeline Plot: Bad Rate by Credit Card Debt and Age Group",
+    x = "Credit Card Debt Ratio", y = "Age Group"
+  ) +
+  theme_minimal(base_size = 16) +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 22),    
+    axis.title.x = element_text(size = 20, face = "bold"),              
+    axis.title.y = element_text(size = 20, face = "bold"),               
+    axis.text.x = element_text(size = 18),                               
+    axis.text.y = element_text(size = 18),                             
+    legend.title = element_text(face = "bold", size = 20),               
+    legend.text = element_text(size = 18)                                 
+  )
+
+ridgeline_plot
+```
+
+<div class="interpretation"> - Across all age groups, the majority of both defaulters and non-defaulters are concentrated at lower credit card debt ratios.
+- Defaulters, however, exhibit a slightly wider distribution, particularly among younger individuals under the age of 32 which indicates that some carry relatively higher levels of credit card debt.
+- Despite this broader spread, the highest concentration of defaulters still falls within the lower debt ranges. 
+- This suggests that while higher credit card debt may contribute to default risk, most defaulters still fall within lower debt levels, indicating other influences may also play a significant role.</div>
+
+
+<div class="phase">Phase 3: Binary Logistic Regression Model</div>
+
+<div class="question"> MODEL VERSION 1 (Using original numeric versions of emp, address, debtinc, creddebt, othdebt)</div> 
+
+<div class="question">1. Create data partition into train and test data sets ( 80/20)</div> 
+
+```{r, message=FALSE, warning=FALSE}
+
+# Importing libraries
+library(caret)
+library(car)
+library(ROCR)
+
+# Create data partition
+set.seed(123)
+
+train_index <- createDataPartition(master_data$bad, p = 0.8, list = FALSE)
+train_data <- master_data[train_index, ]
+test_data <- master_data[-train_index, ]
+```
+
+<div class="question">2. Run Binary Logistic Regression with “bad” as dependent variable and all others as independent variables (credit details, customer info, profile) on train data.</div> 
+
+```{r}
+model_logit <- glm(bad ~ . - custid - emp_cat - address_cat - debtinc_cat - creddebt_cat - othdebt_cat,
+                   data = train_data, family = binomial)
+
+summary(model_logit)
+```
+
+<div class="question">3. Check which variables are significant (revise the model if needed)</div> 
+
+<div class="interpretation"> - The model identifies customer employment and address durations, branch types and debt-related variables (debtinc, creddebt) as statistically significant predictors of default probability.
+- Additionally, several geographic zones (Zones 2,3,7,9,18) show strong influence, indicating regional patterns in customer credit risk.
+- Variables like gender, marital status, vehicle or house ownership, and self-employment status did not show significant contribution to the model.</div>
+
+```{r}
+# Revised logistic regression model (Model Version 1) using only significant numeric variables
+
+model_logit_revised <- glm(bad ~ emp + address + branch + debtinc + creddebt + zone,
+                           data = train_data, family = binomial)
+
+summary(model_logit_revised)
+```
+
+<div class="question">4. Relate results to EDA (do not perform any new analysis)</div>
+
+<div class="interpretation"> - Zones such as Zone 2,3 and 18, which had higher bad rates in EDA, were also found highly significant in the model.
+- Higher debt to income and higher credit card debt levels, which showed risk in EDA, were strongly significant predictors in the model.</div> 
+
+<div class="interpretation"> - Although EDA showed slightly higher bad rates for owning a house, house ownership was not significant in the model.
+- Similarly, demographic factors like age and gender had mild differences in bad rates during EDA but were not important in the model.</div> 
+
+<div class="question">5. Check multicollinearity (use VIF)</div>
+
+```{r}
+vif(model_logit_revised)
+```
+
+<div class="interpretation"> - All GVIF values are below 5, indicating no multicollinearity among the predictors.
+- This confirms that the variables in the revised model are independently contributing to the prediction of default.</div>
+
+<div class="question">6. Obtain ROC curve and AUC for train data</div>
+
+```{r}
+train_pred_prob <- predict(model_logit_revised, newdata = train_data, type = "response")
+pred_train <- prediction(train_pred_prob, train_data$bad)
+perf_roc <- performance(pred_train, "tpr", "fpr")
+plot(perf_roc, main = "ROC Curve - Train Data (Model version 1)", col = "darkblue", lwd = 2)
+abline(0, 1, lty = 2, col = "black")
+```
+
+<div class="interpretation"> - The ROC curve for the train data shows good model performance, with the curve rising well above the diagonal line, indicating effective separation between defaulters and non-defaulters.</div>
+
+```{r}
+# Compute AUC
+auc_train <- performance(pred_train, "auc")
+auc_value <- auc_train@y.values[[1]]
+cat("AUC (Train Data - Model V1):", round(auc_value, 4), "\n")
+```
+
+<div class="interpretation"> - The AUC value of 0.7617 confirms that the model has a 76.2% ability to distinguish between defaulters and non-defaulters across all thresholds on the training data.</div>
+
+<div class="question">7. Obtain classification table and accuracy (%)</div>
+
+```{r}
+threshold <- 0.5
+
+# Predicted Y for train data
+train_data$predY <- as.factor(ifelse(train_pred_prob > threshold, 1, 0))
+
+#Train data confusion Matrix
+confusionMatrix(train_data$predY, as.factor(train_data$bad),positive="1")
+```
+
+<div class="interpretation"> - The model achieved an overall accuracy of 86.15% on the training data.
+- However, its sensitivity is very low (1.35%), meaning it is missing most of the actual defaulters while correctly identifying non-defaulters.</div>
+
+<div class="question">8. Obtain threshold to balance sensitivity and specificity</div>
+
+```{r}
+# Performance for sensitivity and specificity
+perf <- performance(pred_train, "sens", "spec")
+
+sensitivity <- perf@y.values[[1]]
+specificity <- perf@x.values[[1]]
+thresholds <- perf@alpha.values[[1]]
+
+# Find the threshold where sensitivity and specificity are closest
+diff <- abs(sensitivity - specificity)
+best_index <- which.min(diff)
+
+best_threshold <- thresholds[best_index]
+cat("Optimal Threshold (Balanced Sensitivity & Specificity - Model V1):", round(best_threshold, 3), "\n")
+```
+
+<div class="interpretation"> - The optimal cutoff threshold was found as 0.147, which balances sensitivity and specificity on the training data.</div>
+
+```{r}
+threshold <- 0.147
+
+train_data$predY <- as.factor(ifelse(train_pred_prob > threshold, 1, 0))
+confusionMatrix(train_data$predY, as.factor(train_data$bad),positive="1")
+```
+
+<div class="interpretation"> - The model achieved accuracy of 69.1%, with both sensitivity (69.2%) and specificity (69.1%) at nearly equal levels.
+- This balance indicates that the model can reliably detect defaulters (sensitivity) while still maintaining a good rate of correctly identifying non-defaulters (specificity).
+- Although the overall accuracy decreased to 69.1%, this trade-off is acceptable in credit scoring where identifying potential risk is more important than overall correctness.</div>
+
+<div class="question">9. Obtain ROC curve and AUC for test data (compare with step 6)</div>
+
+```{r}
+test_pred_prob <- predict(model_logit_revised, newdata = test_data, type = "response")
+pred_test <- prediction(test_pred_prob, test_data$bad)
+perf_test <- performance(pred_test, "tpr", "fpr")
+plot(perf_test, main = "ROC Curve - Test Data (Model version 1)", col = "red", lwd = 2)
+abline(0, 1, lty = 2, col = "black")
+```
+
+<div class="interpretation"> - The ROC curve for the test data shows strong separation between classes, indicating the model’s ability to effectively distinguish defaulters from non-defaulters.</div>
+
+```{r}
+auc_test <- performance(pred_test, "auc")
+auc_test_value <- auc_test@y.values[[1]]
+cat("AUC (Test Data - Model V1):", round(auc_test_value, 4), "\n")
+```
+
+<div class="interpretation"> - The model achieved an AUC of 0.77 on the test data and 0.7617 on the training data, indicating consistent predictive performance.
+- The slightly higher AUC on the test data suggests that the model generalizes well and is not overfitted, making it reliable for real-world credit risk classification.</div>
+
+<div class="question">10.	Use above threshold to obtain accuracy, sensitivity and specificity for test data (compare with step 7)</div>
+
+```{r}
+threshold <- 0.147
+
+test_pred_prob <- predict(model_logit_revised, newdata = test_data, type = "response")
+test_data$predY <- as.factor(ifelse(test_pred_prob > threshold, 1, 0))
+confusionMatrix(test_data$predY, as.factor(test_data$bad), positive = "1")
+```
+
+<div class="interpretation"> - The model version 1 achieved accuracy of 68.9%, with sensitivity at 67.9% and specificity at 69.1%, when applying the optimized threshold of 0.147 to the test data.
+- These results are highly consistent with the training performance, confirming the model’s stability and reliability in predicting credit default risk.
+- Compared to Step 7 (default threshold of 0.5 on train data), the sensitivity improved significantly  from 1.35% to 67.9%, while maintaining a good balance between accuracy and specificity.</div>
+
+
+
+<div class="question"> MODEL VERSION 2 (Using categorical (recoded) versions of emp, address, debtinc, creddebt, othdebt)</div>
+
+<div class="question">2. Run Binary Logistic Regression with “bad” as dependent variable and all others as independent variables on train data.</div>
+
+```{r}
+# Removing the predY column
+train_data <- train_data %>% select(-predY)
+test_data <- test_data %>% select(-predY)
+
+# Building the model
+model_logit2 <- glm(bad ~ . - custid - emp - address - debtinc - creddebt - othdebt, 
+                    data = train_data, family = binomial)
+
+summary(model_logit2)
+```
+
+<div class="interpretation"> - The logistic regression model identified branch, specific zones, employment and address duration, debt and credit levels as significant predictors of credit default risk.</div>
+
+<div class="question">3. Check which variables are significant (revise the model if needed)</div>
+
+```{r}
+model_logit2_revised <- glm(bad ~ branch + zone + emp_cat + address_cat + debtinc_cat + creddebt_cat,
+                            data = train_data, family = binomial)
+
+summary(model_logit2_revised)
+```
+
+<div class="question">4.	Relate results to EDA (do not perform any new analysis)</div>
+
+<div class="interpretation"> - Customers from zones 2, 3, 7, 9, and 18, showed strong significance, confirming the EDA findings.
+- Employment category and debt to income category results also aligned well. Long employment tenure showed much lower default risk as seen in EDA.</div>
+
+<div class="interpretation"> - The address category "Medium" showed slightly high bad rates in EDA but was not strongly significant in the model.
+- House ownership and reference type status showed noticeable bad rates in EDA but did not show significant contribution to the model.</div>
+
+
+<div class="question">5. Check multicollinearity (use VIF)</div>
+
+```{r}
+vif(model_logit2_revised)
+```
+
+<div class="interpretation"> - All GVIF values are less than 5, indicating no signs of multicollinearity among the predictors in the revised model.</div>
+
+<div class="question">6. Obtain ROC curve and AUC for train data</div>
+
+```{r}
+# ROC curve
+train_pred_prob2 <- predict(model_logit2_revised, newdata = train_data, type = "response")
+
+pred_train2 <- prediction(train_pred_prob2, train_data$bad)
+perf_roc2 <- performance(pred_train2, "tpr", "fpr")
+plot(perf_roc2, main = "ROC Curve - Train Data (Model Version 2)", col = "purple", lwd = 2)
+abline(0, 1, lty = 2, col = "black")
+```
+
+<div class="interpretation"> - The ROC curve for Model Version 2 on the train data shows good separation between defaulters and non-defaulters, indicating reasonable model performance.</div>
+
+```{r}
+# Calculate AUC
+auc_train2 <- performance(pred_train2, "auc")
+auc_value2 <- auc_train2@y.values[[1]]
+cat("AUC (Train Data - Model V2):", round(auc_value2, 4), "\n")
+```
+
+<div class="interpretation"> - The AUC of 0.7335 indicates the model has a 73.4% probability of correctly distinguishing between a bad and good customer based on training data.</div>
+
+<div class="question">7. Obtain classification table and accuracy (%)</div>
+
+```{r}
+threshold2 <- 0.5
+
+train_data$predY2 <- as.factor(ifelse(train_pred_prob2 > threshold2, 1, 0))
+confusionMatrix(train_data$predY2, as.factor(train_data$bad), positive = "1")
+```
+
+<div class="interpretation"> - At the default threshold of 0.5, the model achieved an overall accuracy of 86.8%, driven mainly by correctly classifying non-defaulters.
+- However, with a sensitivity of only 1.76%, the model fails to detect most defaulters, indicating the need for a better threshold.</div>
+
+<div class="question">8. Obtain threshold to balance sensitivity and specificity</div>
+
+```{r}
+pred_train2 <- prediction(train_pred_prob2, train_data$bad)
+perf2 <- performance(pred_train2, "sens", "spec")
+
+sensitivity2 <- perf2@y.values[[1]]
+specificity2 <- perf2@x.values[[1]]
+thresholds2 <- perf2@alpha.values[[1]]
+
+# Find the threshold where sensitivity and specificity are closest
+diff2 <- abs(sensitivity2 - specificity2)
+best_index2 <- which.min(diff2)
+
+best_threshold2 <- thresholds2[best_index2]
+cat("Optimal Threshold (Balanced Sensitivity & Specificity - Model V2):", round(best_threshold2, 3), "\n")
+```
+
+<div class="interpretation"> - The optimal threshold for balancing sensitivity and specificity in Model Version 2 is 0.139.</div>
+
+```{r}
+threshold2 <- 0.139
+
+train_data$predY2 <- as.factor(ifelse(train_pred_prob2 > threshold2, 1, 0))
+confusionMatrix(train_data$predY2, as.factor(train_data$bad),positive="1")
+```
+
+<div class="interpretation"> - At the optimal threshold of 0.139, Model Version 2 achieved accuracy of 67.3%, with sensitivity around 67.4% and specificity around 67.3%.
+- This represents a significant improvement in detecting defaulters compared to the default threshold, making the model more suitable for credit risk classification.</div>
+
+<div class="question">9.	Obtain ROC curve and AUC for test data (compare with step 6)</div>
+
+```{r}
+test_pred_prob2 <- predict(model_logit2_revised, newdata = test_data, type = "response")
+pred_test2 <- prediction(test_pred_prob2, test_data$bad)
+
+perf_test2 <- performance(pred_test2, "tpr", "fpr")
+plot(perf_test2, main = "ROC Curve - Test Data (Model Version 2)", col = "darkorange", lwd = 2)
+abline(0, 1, lty = 2, col = "black")
+```
+
+<div class="interpretation"> - The ROC curve for Model Version 2 on the test data rises steadily, showing that the model does a good job spotting who’s likely to default and who isn’t.</div>
+
+```{r}
+# Calculate AUC
+auc_test2 <- performance(pred_test2, "auc")
+auc_test_value2 <- auc_test2@y.values[[1]]
+cat("AUC (Test Data - Model V2):", round(auc_test_value2, 4), "\n")
+```
+
+<div class="interpretation"> - Model Version 2 achieved an AUC of 0.7281 on test data and 0.7335 on training data, showing consistent predictive performance.
+- The small difference indicates the model generalizes well without overfitting, making it reliable for identifying default risk on unseen data.</div>
+
+<div class="question">10.	Use above threshold to obtain accuracy, sensitivity and specificity for test data (compare with step 7)</div>
+
+```{r}
+threshold2 <- 0.139
+
+test_data$predY2 <- as.factor(ifelse(test_pred_prob2 > threshold2, 1, 0))
+confusionMatrix(test_data$predY2, as.factor(test_data$bad), positive = "1")
+```
+
+<div class="interpretation"> - After applying the optimal threshold of 0.139 to the test data, Model Version 2 achieved an accuracy of 66.6%, with a significant improvement in sensitivity (61.4%) compared to just 1.76% at the default threshold.</div>
+
+<div class="question">	Finalize the model by comparing test data AUC</div>
+
+```{r}
+model <- c("Model Version 1", "Model Version 2")
+auc <- c(auc_test_value, auc_test_value2)
+
+auc_table <- data.frame(Model = model, Test_AUC = auc)
+auc_table$Test_AUC <- round(auc_table$Test_AUC, 4)
+auc_table
+```
+
+<div class="interpretation"> - Model Version 1 (model_logit_revised), with a test AUC of 77%, outperformed Model Version 2 (72.8%).
+- This confirms that Model Version 1 is the stronger model for predicting credit default risk compared to Model Version 2.</div>
+
+
+<div class="phase">Phase 4: ML Methods</div>
+
+<div class="reasoning"> Naive Bayes Method </div>
+
+<div class="question">Create data partition into train and test data sets (80/20)</div>
+
+```{r, message=FALSE, warning=FALSE}
+# Importing required library
+library(e1071)
+
+# Data partition already done for Logistic Regression
+
+# Removing the predY2 and recoded variables
+train_data <- train_data %>%
+  select(-predY2, -custid, -emp_cat, -address_cat, -debtinc_cat, -creddebt_cat, -othdebt_cat)
+
+test_data <- test_data %>%
+  select(-predY2, -custid, -emp_cat, -address_cat, -debtinc_cat, -creddebt_cat, -othdebt_cat)
+```
+
+<div class="question">Apply Naive Bayes Method on train data (“bad” as dependent variables and all others as independent variables (credit details, customer info, profile) on train data.</div>
+
+```{r}
+model_nb <- naiveBayes(bad ~ ., data = train_data)
+```
+
+<div class="question">Obtain ROC curve and AUC for train data</div>
+
+```{r}
+# Predict probabilities for train data
+train_pred_prob_nb <- predict(model_nb, train_data, type = "raw")[,2]
+
+# Plot ROC curve
+pred_train_nb <- prediction(train_pred_prob_nb, train_data$bad)
+perf_train_nb <- performance(pred_train_nb, "tpr", "fpr")
+
+plot(perf_train_nb, main = "ROC Curve - Train Data (Naive Bayes)", col = "darkgreen", lwd = 2)
+abline(0, 1, lty = 2)
+
+# AUC value
+auc_train_nb <- performance(pred_train_nb, "auc")
+auc_train_value_nb <- auc_train_nb@y.values[[1]]
+cat("AUC (Train Data - Naive Bayes):", round(auc_train_value_nb, 4), "\n")
+```
+
+<div class="interpretation"> - The ROC curve shows a reasonably good separation with an AUC of 0.762, indicating that the Naive Bayes model has acceptable predictive ability on the train data. </div>
+
+<div class="question">Obtain Confusion Matrix for train data</div>
+
+```{r}
+train_pred_class_nb <- predict(model_nb, train_data)
+confusionMatrix(train_pred_class_nb, as.factor(train_data$bad), positive = "1")
+```
+
+<div class="interpretation"> - The Naive Bayes model achieved an accuracy of 85.94% on train data, with high specificity (98.08%) but low sensitivity (6.35%), indicating stronger identification of non-defaulters compared to defaulters.</div>
+
+<div class="question">Obtain ROC curve and AUC for test data</div>
+
+```{r}
+# Predict probabilities for test data
+test_pred_prob_nb <- predict(model_nb, test_data, type = "raw")[,2]
+
+# Plot ROC curve
+pred_test_nb <- prediction(test_pred_prob_nb, test_data$bad)
+perf_test_nb <- performance(pred_test_nb, "tpr", "fpr")
+
+plot(perf_test_nb, main = "ROC Curve - Test Data (Naive Bayes)", col = "darkgreen", lwd = 2)
+abline(0, 1, lty = 2)
+
+# AUC value for test data
+auc_test_nb <- performance(pred_test_nb, "auc")
+auc_test_value_nb <- auc_test_nb@y.values[[1]]
+cat("AUC (Test Data - Naive Bayes):", round(auc_test_value_nb, 4), "\n")
+```
+
+<div class="interpretation"> - The ROC curve for test data shows reasonable performance with an AUC of 0.7665, indicating good model discrimination between defaulters and non-defaulters.</div>
+
+<div class="question">Obtain Confusion Matrix for test data</div>
+
+```{r}
+test_pred_class_nb <- predict(model_nb, test_data)
+confusionMatrix(test_pred_class_nb, as.factor(test_data$bad), positive = "1")
+```
+
+<div class="interpretation"> - On the test data, the Naive Bayes model achieved 85.96% accuracy, with high specificity (98.02%) but low sensitivity (6.52%).</div>
+
+
+
+<div class="reasoning"> Support Vector Machine (SVM) Method</div>
+
+<div class="question">Apply SVM Method on Train Data</div>
+
+```{r}
+model_svm <- svm(bad ~ ., data = train_data, kernel = "linear", type = "C", probability = TRUE)
+model_svm
+```
+
+<div class="interpretation"> - A linear kernel SVM model was built using C-classification with a cost of 1, utilizing 2101 support vectors to separate defaulters and non-defaulters.</div>
+
+<div class="question">Obtain ROC curve and AUC for train data</div>
+
+```{r}
+# Predict probabilities for train data
+train_pred_svm <- predict(model_svm, train_data, probability = TRUE)
+train_pred_prob_svm <- attr(train_pred_svm, "probabilities")[, "1"]
+
+# Plot ROC curve
+pred_train_svm <- prediction(train_pred_prob_svm, train_data$bad)
+perf_train_svm <- performance(pred_train_svm, "tpr", "fpr")
+
+plot(perf_train_svm, main = "ROC Curve - Train Data (SVM)", col = "blue", lwd = 2)
+abline(0, 1, lty = 2)
+
+# AUC value for train data
+auc_train_svm <- performance(pred_train_svm, "auc")
+auc_train_value_svm <- auc_train_svm@y.values[[1]]
+cat("AUC (Train Data - SVM):", round(auc_train_value_svm, 4), "\n")
+```
+
+<div class="interpretation"> - The ROC curve for train data shows weak discriminatory ability with a low AUC of 0.6582, indicating that the SVM model struggles to separate defaulters from non-defaulters.</div>
+
+<div class="question">Obtain Confusion Matrix for train data</div>
+
+```{r}
+train_pred_class_svm <- predict(model_svm, train_data)
+confusionMatrix(train_pred_class_svm, as.factor(train_data$bad), positive = "1")
+```
+
+<div class="interpretation"> - On the train data, the SVM model predicts all customers as non-defaulters, achieving 86.76% accuracy mainly based on majority class, but with 0% sensitivity and 100% specificity.</div>
+
+<div class="question">Obtain ROC curve and AUC for test data</div>
+
+```{r}
+# Predict probabilities for test data
+test_pred_svm <- predict(model_svm, test_data, probability = TRUE)
+test_pred_prob_svm <- attr(test_pred_svm, "probabilities")[, "1"]
+
+# Plot ROC curve
+pred_test_svm <- prediction(test_pred_prob_svm, test_data$bad)
+perf_test_svm <- performance(pred_test_svm, "tpr", "fpr")
+
+plot(perf_test_svm, main = "ROC Curve - Test Data (SVM)", col = "blue", lwd = 2)
+abline(0, 1, lty = 2)
+
+# AUC value for test data
+auc_test_svm <- performance(pred_test_svm, "auc")
+auc_test_value_svm <- auc_test_svm@y.values[[1]]
+cat("AUC (Test Data - SVM):", round(auc_test_value_svm, 4), "\n")
+```
+
+<div class="interpretation"> - The ROC curve for the test data demonstrates weak model performance, with a low AUC of 0.662, suggesting that the SVM model has difficulty in reliably distinguishing between defaulters and non-defaulters.</div>
+
+<div class="question">Obtain Confusion Matrix for test data</div>
+
+```{r}
+test_pred_class_svm <- predict(model_svm, test_data)
+confusionMatrix(test_pred_class_svm, as.factor(test_data$bad), positive = "1")
+```
+
+<div class="interpretation"> - On the test data, the SVM model predicted all customers as non-defaulters, achieving 86.82% accuracy due to the higher presence of non-defaulters in the dataset, with perfect specificity (100%) but no ability to detect actual defaulters (0% sensitivity).</div>
+
+
+
+<div class="reasoning"> Decision Tree Method </div>
+
+<div class="question">Apply Decision Tree method on Train Data</div>
+
+```{r, message=FALSE, warning=FALSE, fig.width=19, fig.height=13}
+# Importing required library
+library(partykit)
+
+model_tree <- ctree(bad ~ ., data = train_data)
+plot(model_tree,type="simple", gp = gpar(fontsize = 18, lwd = 2))
+```
+
+<div class="interpretation"> - The decision tree shows that employment duration, credit card debt, and debt-to-income ratio are the key factors in predicting whether a customer will default. These appear at the top levels of the tree, highlighting their importance.
+- Other factors like zone, other debts, and address duration help further split the data and improve classification.</div>
+
+<div class="question">Obtain ROC curve and AUC for train data</div>
+
+```{r}
+# Predict probabilities for train data
+train_pred_prob_tree <- predict(model_tree, train_data, type = "prob")[, "1"] 
+
+# Plot ROC curve
+pred_train_tree <- prediction(train_pred_prob_tree, train_data$bad)
+perf_train_tree <- performance(pred_train_tree, "tpr", "fpr")
+
+plot(perf_train_tree, main = "ROC Curve - Train Data (Decision Tree)", col = "orange", lwd = 2)
+abline(0, 1, lty = 2)
+
+# AUC value for train data
+auc_train_tree <- performance(pred_train_tree, "auc")
+auc_train_value_tree <- auc_train_tree@y.values[[1]]
+cat("AUC (Train Data - Decision Tree):", round(auc_train_value_tree, 4), "\n")
+```
+
+<div class="interpretation"> - The ROC curve for the train data shows moderate discriminatory ability with an AUC of 0.7602, indicating a fair separation between defaulters and non-defaulters.</div>
+
+<div class="question">Obtain Confusion Matrix for train data</div>
+
+```{r}
+train_pred_class_tree <- predict(model_tree, train_data)
+confusionMatrix(train_pred_class_tree, as.factor(train_data$bad), positive = "1")
+```
+
+<div class="interpretation"> - Decision Tree model achieved 86.78% accuracy on the train data, with very high specificity (99.9%) but extremely low sensitivity (0.54%), predicting almost all customers as non-defaulters.</div>
+
+<div class="question">Obtain ROC curve and AUC for test data</div>
+
+```{r}
+# Predict probabilities for test data
+test_pred_prob_tree <- predict(model_tree, test_data, type = "prob")[, "1"]
+
+# Plot ROC curve
+pred_test_tree <- prediction(test_pred_prob_tree, test_data$bad)
+perf_test_tree <- performance(pred_test_tree, "tpr", "fpr")
+
+plot(perf_test_tree, main = "ROC Curve - Test Data (Decision Tree)", col = "orange", lwd = 2)
+abline(0, 1, lty = 2)
+
+# AUC value for test data
+auc_test_tree <- performance(pred_test_tree, "auc")
+auc_test_value_tree <- auc_test_tree@y.values[[1]]
+cat("AUC (Test Data - Decision Tree):", round(auc_test_value_tree, 4), "\n")
+```
+
+<div class="interpretation"> - The ROC curve for the test data indicates moderate model performance with an AUC of 0.7381.</div>
+
+<div class="question">Obtain Confusion Matrix for test data</div>
+
+```{r}
+test_pred_class_tree <- predict(model_tree, test_data)
+confusionMatrix(test_pred_class_tree, as.factor(test_data$bad), positive = "1")
+```
+
+<div class="interpretation"> - Decision Tree model achieved 86.46% accuracy on the test data, with 99.42% specificity but extremely low sensitivity (1.09%), predicting almost all customers as non-defaulters.</div>
+
+
+
+<div class="reasoning"> Random Forest Method </div>
+
+<div class="question"> Apply Random Forest on Train Data</div>
+
+```{r, message=FALSE, warning=FALSE}
+# Importing required library
+library(randomForest)
+
+model_rf <- randomForest(bad ~ ., data = train_data, ntree = 500, mtry = floor(sqrt(ncol(train_data) - 2)), importance = TRUE)
+
+model_rf
+```
+
+<div class="interpretation"> - Random Forest model was built with 500 trees and 4 variables tried at each split, achieving an out of bag (OOB) error rate of 13.04%, indicating strong model performance on training data.</div>
+
+```{r}
+# Variable Importance Plot
+model_rf$importance
+varImpPlot(model_rf,col="darkgreen")
+```
+
+<div class="interpretation"> - The variable importance plot from the Random Forest model shows that employment duration (emp), loan to income ratio (debtinc), other debts (othdebt), credit card debt (creddebt), and zone are the most influential features in classifying customers.</div>
+
+<div class="question"> Obtain ROC curve and AUC for train data</div>
+
+```{r}
+# Predict probabilities for train data
+train_pred_prob_rf <- predict(model_rf, train_data, type = "prob")[, "1"]
+
+# Plot ROC curve
+pred_train_rf <- prediction(train_pred_prob_rf, train_data$bad)
+perf_train_rf <- performance(pred_train_rf, "tpr", "fpr")
+
+plot(perf_train_rf, main = "ROC Curve - Train Data (Random Forest)", col = "darkred", lwd = 2)
+abline(0, 1, lty = 2)
+
+# AUC value for train data
+auc_train_rf <- performance(pred_train_rf, "auc")
+auc_train_value_rf <- auc_train_rf@y.values[[1]]
+cat("AUC (Train Data - Random Forest):", round(auc_train_value_rf, 4), "\n")
+```
+
+<div class="interpretation"> - The ROC curve for the train data shows perfect model performance with an AUC of 1, indicating complete separation between defaulters and non-defaulters.</div>
+
+<div class="question"> Obtain Confusion Matrix for train data</div>
+
+```{r}
+train_pred_class_rf <- predict(model_rf, train_data)
+confusionMatrix(train_pred_class_rf, as.factor(train_data$bad), positive = "1")
+```
+
+<div class="interpretation"> - On the train data, the Random Forest model achieved 100% accuracy, sensitivity, and specificity, perfectly classifying all customers without any error.</div>
+
+<div class="question">Obtain ROC curve and AUC for test data</div>
+
+```{r}
+# Predict probabilities for test data
+test_pred_prob_rf <- predict(model_rf, test_data, type = "prob")[, "1"]
+
+# Plot ROC curve
+pred_test_rf <- prediction(test_pred_prob_rf, test_data$bad)
+perf_test_rf <- performance(pred_test_rf, "tpr", "fpr")
+
+plot(perf_test_rf, main = "ROC Curve - Test Data (Random Forest)", col = "darkred", lwd = 2)
+abline(0, 1, lty = 2)
+
+# AUC value for test data
+auc_test_rf <- performance(pred_test_rf, "auc")
+auc_test_value_rf <- auc_test_rf@y.values[[1]]
+cat("AUC (Test Data - Random Forest):", round(auc_test_value_rf, 4), "\n")
+```
+
+<div class="interpretation"> - The ROC curve for the test data shows strong model performance with an AUC of 0.7953, indicating good separation between defaulters and non-defaulters.</div>
+
+<div class="question">Obtain Confusion Matrix for test data</div>
+
+```{r}
+test_pred_class_rf <- predict(model_rf, test_data)
+confusionMatrix(test_pred_class_rf, as.factor(test_data$bad), positive = "1")
+```
+
+<div class="interpretation"> - The Random Forest model achieved 86.89% accuracy on the test data, with very high specificity (99.59%) but low sensitivity (3.26%), predicting non-defaulters very well.</div>
+
+<div class="question">Compare AUC for test data in case of all methods and finalize the method</div>
+
+```{r}
+model_names <- c("Logistic Regression", "Naive Bayes", "SVM", "Decision Tree", "Random Forest")
+test_auc_values <- c(auc_test_value, auc_test_value_nb, auc_test_value_svm, auc_test_value_tree, auc_test_value_rf)
+
+comparison_table <- data.frame(Model = model_names, Test_AUC = test_auc_values)
+comparison_table
+
+# Horizontal bar plot
+ggplot(comparison_table, aes(x = reorder(Model, Test_AUC), y = Test_AUC, fill = Model)) +
+  geom_bar(stat = "identity", width = 0.6) +
+  coord_flip() +
+  labs(title = "Test AUC Comparison Across Models", x = "Model", y = "Test AUC") +
+  theme_minimal() +
+  scale_fill_manual(values = c("olivedrab3", "goldenrod", "darkmagenta", "lightseagreen", "skyblue3")) +
+  theme(legend.position = "none")
+```
+
+<div class="interpretation"> 
+<b>Conclusion:</b> 
+Among these models, the Random Forest model demonstrated the highest test AUC value of 0.7953, indicating strong discriminatory ability.<br> 
+Based on test AUC comparison, the Random Forest model is finalized as the best performing method for the classification task.
+
+<b>Finalized model:</b> Random Forest (Highest AUC = 0.7953)</div>
+
+
+
+<div class="phase">Phase 5: Customer Feedback Analysis</div>
+
+<div class="question"> 1. Text Pre-processing</div>
+
+```{r, message=FALSE, warning=FALSE}
+# Import required libraries
+library(tm)
+library(dplyr)
+library(tidytext)
+library(stringr)
+library(ggplot2)
+library(wordcloud)
+library(sentimentr)
+
+# Import and preprocess text data
+feedback <- readLines(file.choose())
+head(feedback)
+
+# Convert feedback to a data frame and remove any empty lines
+feedback <- data.frame(text = feedback, stringsAsFactors = FALSE) %>%
+  filter(str_trim(text) != "")
+
+# Create corpus
+corpus <- Corpus(VectorSource(feedback$text))
+
+# Clean text - Removing punctuation, numbers, stopwords and extra space
+corpus_clean <- corpus %>%
+  tm_map(content_transformer(tolower)) %>%
+  tm_map(removePunctuation) %>%
+  tm_map(removeNumbers) %>%
+  tm_map(removeWords, stopwords("english")) %>%
+  tm_map(removeWords, c("bank", "loan", "pl", "manager", "officer", "application", "product", "service", "process", "experience")) %>%
+  tm_map(stripWhitespace)
+
+# Convert corpus to clean data frame
+feedback_clean <- data.frame(text = sapply(corpus_clean, as.character), stringsAsFactors = FALSE)
+```
+
+<div class="question"> 2. Word Cloud</div>
+
+```{r, message=FALSE, warning=FALSE}
+# Create Term-Document Matrix and get word frequencies
+tdm <- TermDocumentMatrix(corpus_clean)
+m <- as.matrix(tdm)
+word_freqs <- sort(rowSums(m), decreasing = TRUE)
+word_data <- data.frame(word = names(word_freqs), freq = word_freqs)
+
+# Generate word cloud
+set.seed(123)
+
+wordcloud(words = word_data$word, freq = word_data$freq,
+          min.freq = 1, max.words = 100,
+          scale = c(4, 0.5),
+          colors = brewer.pal(8, "Dark2"),
+          random.order = FALSE)
+```
+
+<div class="interpretation"> - The word cloud reveals that customers often referred to experiences with “good” service, “interest” rates, “staff” interactions and "quick" process.
+- This suggests that customer feedback primarily reflects perceptions of service quality, efficiency and product satisfaction, which are important to their overall experience.</div>
+
+
+<div class="question"> 3. Sentiment Analysis</div>
+
+```{r}
+# Get sentence level sentiment scores
+sentiment_result <- sentiment(feedback_clean$text)
+
+# Aggregate scores per feedback entry
+sentiment_summary <- sentiment_result %>%
+  group_by(element_id) %>%
+  summarise(sentiment = mean(sentiment))
+
+## As several feedback entries contained multiple sentences, sentiment analysis was performed at the sentence level and then averaged across each full entry to reflect the overall customer sentiment.
+
+# Combine with original feedback
+feedback_with_sentiment <- bind_cols(feedback_clean, sentiment_summary)
+
+# Classify Sentiment into Categories
+feedback_with_sentiment <- feedback_with_sentiment %>%
+  mutate(sentiment_category = case_when(
+    sentiment > 0.1 ~ "Positive",
+    sentiment < -0.1 ~ "Negative",
+    TRUE ~ "Neutral"
+  ))
+
+head(feedback_with_sentiment)
+```
+
+<div class="interpretation"> - Most of the initial feedback entries show a positive sentiment, reflecting customer satisfaction with services like approval speed and guidance.</div>
+
+<div class="question"> 4. Visualizing Sentiment Scores</div>
+
+```{r}
+# Pie chart: Sentiment Category Counts
+category_counts <- feedback_with_sentiment %>%
+  count(sentiment_category)
+
+ggplot(category_counts, aes(x = "", y = n, fill = sentiment_category)) +
+  geom_bar(stat = "identity", width = 1) +
+  coord_polar("y", start = 0) +
+  theme_void() +
+  labs(fill = "Sentiment") +
+  ggtitle("Proportion of Sentiment Categories") +
+  geom_text(aes(label = scales::percent(n / sum(n))), 
+            position = position_stack(vjust = 0.5)) +
+  scale_fill_manual(values = c("Positive" = "cadetblue2", 
+                                "Negative" = "red", 
+                                "Neutral"  = "khaki1"))
+```
+
+<div class="interpretation"> - The pie chart shows that 75.3% of customer feedback is positive, indicating a strong level of satisfaction with the bank’s services.
+- In contrast, only 11.1% is negative, while 13.6% remains neutral, suggesting that unfavorable experiences are relatively limited.</div>
+
+```{r}
+# Faceted Histogram: Sentiment Score Distribution
+ggplot(feedback_with_sentiment, aes(x = sentiment, fill = sentiment_category)) +
+  geom_histogram(bins = 20, position = "identity", alpha = 0.7) +
+  facet_wrap(~ sentiment_category) +
+  labs(title = "Sentiment Score Distribution by Category",
+       x = "Sentiment Score",
+       y = "Count",
+       fill = "Sentiment") +
+  theme_minimal() +
+  scale_fill_manual(values = c("Negative" = "#d7191c", 
+                               "Neutral"  = "#fdae61", 
+                               "Positive" = "#1a9641"))
+```
+
+<div class="interpretation"> - The sentiment score distribution shows that positive feedback is not only more frequent but also more strongly expressed, with scores clustering toward the higher end.
+- Negative sentiments are fewer and less intense, while neutral responses remain centered near zero, reflecting a lack of strong opinion.</div>
+
+```{r}
+# Boxplot: Spread of Sentiment Scores
+ggplot(feedback_with_sentiment, aes(x = "", y = sentiment)) +
+  geom_boxplot(fill = "lightblue") +
+  geom_jitter(width = 0.1, alpha = 0.6, color = "red") +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "black") +
+  labs(
+    title = "Spread of Sentiment Scores with Individual Points",
+    x = NULL,
+    y = "Sentiment Score"
+  ) +
+  theme_minimal()
+```
+
+<div class="interpretation"> - The boxplot illustrates that most sentiment scores cluster above zero, with a median well into the positive range, indicating overall favorable customer feedback.
+- A few outliers fall below zero, showing some isolated negative sentiments, but they are relatively rare compared to the volume of positive responses.</div>
+
+<div class="reasoning"> Analyze Negative Feedback </div>
+```{r}
+# Load stop words
+data("stop_words")
+
+# Filter only negative feedback
+negative_feedback <- feedback_with_sentiment %>%
+  filter(sentiment_category == "Negative")
+
+# Tokenize and remove stopwords
+negative_words <- negative_feedback %>%
+  unnest_tokens(word, text) %>%
+  anti_join(stop_words, by = "word") %>%
+  count(word, sort = TRUE)
+  
+# Select top 10 negative words
+top_negative_words <- negative_words %>%
+  top_n(10, n) %>%
+  arrange(n)
+
+# Lollipop chart
+ggplot(top_negative_words, aes(x = reorder(word, n), y = n)) +
+  geom_segment(aes(xend = word, y = 0, yend = n), color = "darkgreen") +
+  geom_point(size = 4, color = "darkorange") +
+  coord_flip() +
+  labs(title = "Top Words in Negative Customer Feedback",
+       x = "Word",
+       y = "Frequency") +
+  theme_minimal(base_size = 12)
+```
+
+<div class="interpretation"> - The lollipop chart highlights commonly used words in negative customer feedback, such as “slow” and “lacked”, which indicate that dissatisfaction mainly arises from delays and lack of proactive support.</div>
+
+<div class="interpretation"> 
+<b>Conclusion:</b>
+<ul>
+ <li>The customer feedback analysis revealed that over 75% of responses were positive, emphasizing service satisfaction.</br>
+ <li>However, critical insights from negative feedback highlighted operational gaps in the bank’s service delivery and suggesting the need for process improvements and enhanced staff responsiveness to better meet customer expectations.</ul>
+</div>
+
+
+
+
