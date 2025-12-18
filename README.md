@@ -106,7 +106,7 @@ The radial chart summarizes the average risk profile, clearly showing that defau
 - **data/** – Structured and unstructured datasets used for analysis  
 - **credit_scoring_analysis.Rmd** – Core analysis and modeling workflow  
 - **outputs/** – Visual outputs (EDA, model evaluation, sentiment analysis)  
-- **credit_scoring_project_presentation.pptx** – Executive summary of insights  
+- **credit_scoring_project_presentation.pdf** – Executive summary of insights  
 - **variable_definitions.xlsx** – Detailed data dictionary for variables  
 
 ---
